@@ -7,11 +7,9 @@ class myPCA:
         self.matrixArray = self.convertMatrix(matrixArray)
         self.correlationMatrix = self.correlation()
         self.eigVal, self.eigVec = self.eigen()
+        # Se procede a obtener la matriz C
         self.C = np.matmul(np.transpose(self.matrixArray),self.eigVec)
         self.inertia = self.getInertia()
-        
-
-
 
     def convertMatrix(self,matrixArray):
         '''
@@ -32,6 +30,9 @@ class myPCA:
         return correlation
 
     def eigen(self):
+        '''
+        Calcular y ordenar los eigenvector y los eigenvalues
+        '''
         eigVal, eigVec = np.linalg.eigh(self.correlationMatrix)
         eigVal = np.absolute(eigVal)
         sortIndex = np.argsort(eigVal)[::-1]
@@ -39,9 +40,11 @@ class myPCA:
         eigVec = np.transpose(eigVec)
         eigVec = eigVec[sortIndex]
         eigVec = np.transpose(eigVec)
-        print(sortIndex)
         return eigVal,eigVec
     
     def getInertia(self):
+        '''
+        Obtener la matriz de correlación
+        '''
         totalValues = self.correlationMatrix.shape[0]
         return [value/totalValues for value in self.eigVal]
