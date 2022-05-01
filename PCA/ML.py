@@ -8,24 +8,28 @@ class myPCA:
         self.correlationMatrix = self.correlation()
         self.eigVal, self.eigVec = self.eigen()
         # Se procede a obtener la matriz C
-        self.C = np.matmul(np.transpose(self.matrixArray),self.eigVec)
+        self.C = np.matmul(self.matrixArray,self.eigVec)
         self.inertia = self.getInertia()
 
     def convertMatrix(self,matrixArray):
         '''
         Centrar y convertir matriz
         '''
+        # Se transpone para poder obtener por fila los valores de media y desviacion y calcular
+        matrixArray = np.transpose(matrixArray)
         mean = [np.mean(value) for value in matrixArray]
         desviacion = [np.std(value) for value in matrixArray]
-        for iy, ix in np.ndindex(matrixArray.shape):
-            matrixArray[iy, ix] = (matrixArray[iy, ix] - mean[iy]) /  desviacion[iy]
+        for r, c in np.ndindex(matrixArray.shape):
+            matrixArray[r, c] = (matrixArray[r, c] - mean[r]) /  desviacion[r]
+        # Se vuelve a su forma original
+        matrixArray = np.transpose(matrixArray)
         return matrixArray
 
     def correlation(self):
         '''
         Calcular la matriz de correlaciones
         '''
-        matrix = np.dot(self.matrixArray,np.transpose(self.matrixArray))
+        matrix = np.matmul(np.transpose(self.matrixArray),self.matrixArray)
         correlation = matrix/self.matrixArray.shape[0]
         return correlation
 
