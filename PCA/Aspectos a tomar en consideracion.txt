@@ -1,0 +1,11 @@
+1. Lo que importa en el círculo es el ángulo y la magnitud
+2. Los componentes principales pueden usarse sin ningún problema como variables para determinar modelos, pero tome en consideración
+que los mismos provocan que se pierda interpretabilidad
+
+3. Podría hacer reducciones de variables según lo que usted ve el círculo de correlación, pero vea que esto es solo correlación
+basado en magnitud y angulo de dos variables, que pueden no ser suficientes.
+
+Preguntar al profe: 
+Si yo hago un modelo por PCA, y ya tengo el modelo
+como debería ser las variables que meto al modelo (utilizo los vectores propios con lo que los hice y transformo las variables)
+o como haría (El modelo funka con pca y no con las variables como tal)
