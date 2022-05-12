@@ -1,4 +1,6 @@
 
+from lib2to3.pytree import LeafPattern
+from operator import le
 import numpy as np
 import sys
 import itertools
@@ -32,14 +34,19 @@ class LR:
         currentError = 0
         error = sys. float_info. max
         C = np.random.rand(x.shape[1],1) # TODO 1 : Ask for better options, to crate random values
+        prevDC = 0
         for _ in itertools.repeat(None, max_epochs):
             y_predict = x*C
             currentError = MAE(y,y_predict)
             if currentError - error > threshold:
                 break
             currentError = error
-            dC = self.gradientDescend(x,y_predict,y)
-            C = learning_rate * dC
+            dC = self.gradientDescend(x,y_predict,y) # TODO 2: How to make the derivative of mse
+            C -= learning_rate * (dC+ momentum * prevDC)
+            learning_rate = learning_rate/(1+decay)
+            prevDC = dC
+            # TODO 3: Como pongo la regularizacion, va en el error todo bien, pero en las derivadas?
+
         self.C = C
 
     def predict(self, x):
