@@ -17,31 +17,30 @@ def score(y_true, y_predict):
     SST = (y_true - y_predict.mean()).pow(2) # Sum of squared total 
     return SSR / SST
 REGULARIZATION = ["l1", "lasso","l2" "ridge", "elastic-net",None]
+
 class LR:
     def __init__(self):
         return
-        C = np.random.rand(5,1) # TODO 1 : Ask for better options
-
-    def fit(self, x, y, max_epochs=100, threshold=0.01, learning_rate=0.001, momentum=0, decay=0, error = 'mse', regularization='none', lambdaV=0):
-        funcError = MSE
-        if error == 'mae':
-            funcError = MAE
-        
-    def gradientDescend(x,y_true,y_predict):
+    
+    def GDMAE(x,y_true,y_predict):
+        return (np.sign(y_true-y_predict).mul(x)).mean()
+    
+    def GDMSE(x,y_true,y_predict):
         return (2*(y_true-y_predict)).mul(x).mean()
+
 
     def fit(self,x, y, max_epochs=100, threshold=0.01, learning_rate=0.001, momentum=0, decay=0, error = 'mse', regularization='none', lambdaV=0):
         currentError = 0
-        error = sys. float_info. max
-        C = np.random.rand(x.shape[1],1) # TODO 1 : Ask for better options, to crate random values
+        maxError = sys.float_info.max
+        C = np.random.rand(x.shape[1],1) 
         prevDC = 0
         for _ in itertools.repeat(None, max_epochs):
             y_predict = x*C
-            currentError = MAE(y,y_predict)
-            if currentError - error > threshold:
+            currentError = MSE(y,y_predict)
+            if maxError - currentError> threshold:
                 break
-            currentError = error
-            dC = self.gradientDescend(x,y_predict,y) # TODO 2: How to make the derivative of mse
+            maxError = currentError
+            dC = self.GDMSE(x,y_predict,y) 
             C -= learning_rate * (dC+ momentum * prevDC)
             learning_rate = learning_rate/(1+decay)
             prevDC = dC
