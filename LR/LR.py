@@ -24,26 +24,27 @@ def score(y_true, y_predict):
     return SSR / SST
 REGULARIZATION = ["l1", "lasso","l2" "ridge", "elastic-net",None]
 
-def L1():
-    pass
-def L2():
-    pass
-def ELASTIC():
-    return L2() + L1()
+def L1(C,lamda):
+    return C.abs().sum()*lamda
 
-def L1D():
-    pass
-def L2D():
-    pass
-def ELASTICD():
-    return L2D() + L1D()
+def L2(C,lamda):
+    return C.pow.sum()*lamda 
+def ELASTIC(C,lamda):
+    return L2(C,lamda) + L1(C,(1-lamda))
+
+def L1D(C,lamda):
+    return np.full(C.size,lamda)
+def L2D(C,lamda):
+    return C * 2 * lamda
+def ELASTICD(C,lamda):
+    return L2D(C,lamda) + L1D(C,(1-lamda))
 
 class LR:
     def __init__(self):
         return
 
 
-    def fit(self,x, y, max_epochs=100, threshold=0.01, learning_rate=0.001, momentum=0, decay=0, error = 'mse', regularization='none', lambdaV=0):
+    def fit(self,x, y, max_epochs=100, threshold=0.01, learning_rate=0.001, momentum=0, decay=0, error = 'mse', regularization='none', lamda=0):
         # 1. Se pone los primeros atributos
         currentError = 0 # Para llevar el error
         maxError = sys.float_info.max # Para comparar en el threshold
@@ -62,11 +63,11 @@ class LR:
         # 4. Se inicia el fit como tal
         for _ in itertools.repeat(None, max_epochs): # Se repite por n epocas
             y_predict = x*C # Se realiza la prediccion
-            currentError= errorFun(y,y_predict) + errorReg()# Se calcula el error
+            currentError= errorFun(y,y_predict) + errorReg(C,lamda)# Se calcula el error
             if maxError - currentError> threshold: # Si no se supera el threshold, se finaliza el proceso del fit
                 break
             maxError = currentError # Se asigna el error nuevo maximo que se tiene
-            dC = errorDer(x,y_predict,y) + regDer() # Se obtiene los valores de dC
+            dC = errorDer(x,y_predict,y) + regDer(C,lamda) # Se obtiene los valores de dC
             C -= learning_rate * (dC+ momentum * prevDC) # Se calculan los nuevos C
             learning_rate = learning_rate/(1+decay) # Se calcula la nueva taza de aprendizaje, si hay decaimiento
             prevDC = dC # Se asigna los actuales dC como los antiguos, con objetivo de que se puedan utilizar posteriormente cuando se realice el momentum
