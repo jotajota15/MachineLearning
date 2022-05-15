@@ -10,11 +10,11 @@ def MSE(y_true, y_predict):
 def MAE(y_true, y_predict): 
     return np.mean(np.absolute(y_true - y_predict))
 
-def GDMAE(x,y_true,y_predict):
-    return (np.sign(y_true-y_predict).dot(x))/y_true.size
+def GDMAE(x,y_predict,y_true):
+    return (np.sign(y_predict-y_true).dot(x))/y_true.size
     
-def GDMSE(x,y_true,y_predict):
-    return ((2*(y_true-y_predict)).dot(x))/y_true.size
+def GDMSE(x,y_predict,y_true):
+    return ((2*(y_predict-y_true)).dot(x))/y_true.size
 
 # R2 = ∑ (yi - f(xi))2 /  ∑ (yi - ∑(f(xj))/n )2
 # R2 = ∑ (yi - f(xi))2 /  ∑ (yi - f(x)mean )2
@@ -22,7 +22,6 @@ def score(y_true, y_predict):
     SSR = (y_true - y_predict).pow(2).sum()# Sum of squared regression
     SST = (y_true - y_predict.mean()).pow(2).sum() # Sum of squared total 
     return SSR / SST
-REGULARIZATION = ["l1", "lasso","l2" "ridge", "elastic-net",None]
 
 def L1(C,lamda):
     return np.sum(np.absolute(C))*lamda
@@ -46,7 +45,8 @@ class LR:
     def fit(self,x, y, max_epochs=100, threshold=0.01, learning_rate=0.001, momentum=0, decay=0, error = 'mse', regularization='none', lamda=0):
         # 1. Se pone los primeros atributos
         currentError = 0 # Para llevar el error
-        maxError = sys.float_info.max # Para comparar en el threshold
+        first = False
+        maxError = sys.maxsize # Para comparar en el threshold
         C = np.random.random(x.shape[1]+1)  # Para obtener los pesos iniciales de C
         prevDC = 0 # Para poder utilizar el valor previo de las derivada de C al obtener el momentum
         # 2. Se asignan las funciones de error y de la obtencion de los gradiantes
@@ -66,8 +66,9 @@ class LR:
         for _ in itertools.repeat(None, max_epochs): # Se repite por n epocas
             y_predict = x.dot(C) # Se realiza la prediccion
             currentError= errorFun(y,y_predict) + errorReg(C,lamda)# Se calcula el error
-            if (currentError/maxError) < threshold: # Si no se supera el threshold, se finaliza el proceso del fit
+            if (first and  1-(currentError/maxError) > (threshold)): # Si no se supera el threshold, se finaliza el proceso del fit
                 break
+            first = True
             maxError = currentError # Se asigna el error nuevo maximo que se tiene
             dC = errorDer(x,y_predict,y) + regDer(C,lamda) # Se obtiene los valores de dC
             C -= learning_rate * (dC+ momentum * prevDC) # Se calculan los nuevos C
