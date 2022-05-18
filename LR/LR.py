@@ -5,37 +5,60 @@ import numpy as np
 import sys
 import itertools
 def MSE(y_true, y_predict):
+    '''
+    Funcion del error medio cuadratico
+    '''
     return np.mean(np.power((y_true - y_predict),2))
 
 def MAE(y_true, y_predict): 
+    '''
+    Función del error medio absoluto
+    '''
     return np.mean(np.absolute(y_true - y_predict))
 
 def GDMAE(x,y_predict,y_true):
+    '''
+    Función de la derivada del del error medio cuadrado
+    '''
     return (np.sign(y_predict-y_true).dot(x))/y_true.size
     
 def GDMSE(x,y_predict,y_true):
+    '''
+    Función de la derivada del del error medio absoluto
+    '''
     return ((2*(y_predict-y_true)).dot(x))/y_true.size
 
-# R2 = ∑ (yi - f(xi))2 /  ∑ (yi - ∑(f(xj))/n )2
-# R2 = ∑ (yi - f(xi))2 /  ∑ (yi - f(x)mean )2
-def score(y_true, y_predict):
-    SSR = (y_true - y_predict).pow(2).sum()# Sum of squared regression
-    SST = (y_true - y_predict.mean()).pow(2).sum() # Sum of squared total 
-    return SSR / SST
-
 def L1(C,lamda):
+    '''
+    Funcion de L1
+    '''
     return np.sum(np.absolute(C))*lamda
 
 def L2(C,lamda):
+    '''
+    Funcion de L2
+    '''
     return np.power(C,2).sum()*lamda 
 def ELASTIC(C,lamda):
+    '''
+    Funcion de elastic-net
+    '''
     return L2(C,lamda) + L1(C,(1-lamda))
 
 def L1D(C,lamda):
+    '''
+    Funcion de la derivada de L1
+    '''
     return np.full(C.size,lamda)
 def L2D(C,lamda):
+    '''
+    Funcion de la derivada de L2
+    '''
     return C * 2 * lamda
 def ELASTICD(C,lamda):
+    '''
+    Funcion de la derivada de elastic-net
+    '''
     return L2D(C,lamda) + L1D(C,(1-lamda))
 
 class LR:
@@ -43,6 +66,10 @@ class LR:
         return
 
     def fit(self,x, y, max_epochs=100, threshold=0.01, learning_rate=0.001, momentum=0, decay=0, error = 'mse', regularization='none', lamda=0):
+        '''
+        Funcion para obtener los valores de C o pesos para la regresion lineal
+        '''
+        
         # 1. Se pone los primeros atributos
         currentError = 0 # Para llevar el error
         first = False
@@ -64,9 +91,11 @@ class LR:
         y = y.to_numpy()
 
         for _ in itertools.repeat(None, max_epochs): # Se repite por n epocas
-            y_predict = x.dot(C) # Se realiza la prediccion
+            y_predict = x.dot(C) # Se realiza la prediccion (Multiplicacion de matriz)
             currentError= errorFun(y,y_predict) + errorReg(C,lamda)# Se calcula el error
-            if (first and  1-(currentError/maxError) > (threshold)): # Si no se supera el threshold, se finaliza el proceso del fit
+            print(currentError)
+            if (first and  np.absolute(1-(currentError/maxError))< (threshold)): # Si no se supera el threshold, se finaliza el proceso del fit
+                # Absolute in 1 -
                 break
             first = True
             maxError = currentError # Se asigna el error nuevo maximo que se tiene
@@ -78,5 +107,8 @@ class LR:
         self.C = C
 
     def predict(self, x):
+        '''
+        Funcion de prediccion
+        '''
         x = np.insert(x.to_numpy(), 0, np.full(x.shape[0],1), axis=1)
         return x.dot(self.C)
