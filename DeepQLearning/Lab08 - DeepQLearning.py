@@ -67,7 +67,9 @@ DF = "DiscountFactor"
 EP = "EpsilonGreddy"
 DE = "Decay" 
 QT = "Q-LearningTable"
-
+MC = "Memory Capacity"
+BS = "Batch Size"
+I = "C Iterations"
 class Agent():
     # Initializes the training model
     # Input states for the model depend on the get_state method, which can be modified
@@ -87,6 +89,10 @@ class Agent():
         self.STATS[DF] = discount_factor
         self.STATS[EP] = eps_greedy  
         self.STATS[DE] = decay
+        self.STATS[MC] = memory_capacity
+        self.STATS[BS] = batch_size  
+        self.STATS[I] = c_iters
+
         self.prng = random.Random()
         self.prng.seed(RANDOM_SEED)
     
@@ -117,7 +123,7 @@ class Agent():
     # Performs a single step of the simulation by the agent, if learn=False memories are not stored
     def step(self, env, learn=True):
         # Get current state
-        current_state = self.get_state() # It hasn´t been tested
+        current_state = env.get_state() # It hasn´t been tested
         random_movement = False
         action = 0
         # if learn=False no updates are performed and the best action is always taken
