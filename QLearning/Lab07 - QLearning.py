@@ -3,6 +3,13 @@
 @author: Blopa
 """
 
+'''
+1. Es demasiado la poca ganancia de que usted encuentre lo correcto, imaginese que a partir del 3 previo, la ganancia NO  es nada 
+2. Por otra parte, debe de preguntarle al profe sobre ese maxa y ademas de esa resta rara de Q(s,a) . Tome en consideracion que eso es 
+actualizar la Q(s,a)
+maxa'Q(T(s,a),a') - Q(s,a)) , LITERAL SON ESOS DOS VALORES
+'''
+
 import enum
 from turtle import update
 from more_itertools import first
@@ -70,19 +77,26 @@ class Agent():
         self.prng = random.Random()
         self.prng.seed(seed)
 
+        self.longest = 0
 
         # TODO: Implement init
 
     def __update_q_table(self,stack_rewards,stack_actions):
-        acc_val = stack_rewards.pop()[0] # The reward by last_state
+        acc_val = stack_rewards.pop()[0] # The reward by terminal_state
         while(bool(stack_rewards)):
             current_state = stack_rewards.pop() # current state
+            reward = current_state[0]
             state = current_state[1]
             action = stack_actions.pop()
-            reward = current_state[0]
-            # TODO FALTA
-            acc_val = (reward +  (acc_val) * self.STATS[DF]) * self.STATS[LR]  
+            acc_val = (reward +  self.STATS[DF] * (acc_val)   - self.STATS[QT][state][action]) * self.STATS[LR] 
+            
+            #acc_val = (reward +  (acc_val) * self.STATS[DF] - self.STATS[QT][state][action]) * self.STATS[LR] 
+
             self.STATS[QT][state][action] += acc_val
+            vs_acc_val = self.STATS[QT][state].max()
+            if(vs_acc_val> acc_val):
+                acc_val = vs_acc_val
+
 
     # Performs a complete simulation by the agent
     def simulation(self, env):
@@ -96,10 +110,16 @@ class Agent():
             self.new_key(first_state)
         # Do simulation
         stack_rewards = deque() # To get all the rewards
-        # Insert the first state 24445
-        stack_rewards.append((first_state,0))
+        # Insert the first state
+        stack_rewards.append((0,first_state))
         stack_actions = deque() # To get all the actions
         simulation_flag = False
+
+        something= []
+
+
+        simulation_max = 0
+        negative = -500
         while not simulation_flag:
             # Do the step
             step_tuple = self.step(env) # step_tuple = ((reward, state),action)  
@@ -108,10 +128,23 @@ class Agent():
             # update in stack_actions
             stack_actions.append(step_tuple[1])
             # Change the new eps_greddy
-            self.STATS[EP] /= self.STATS[DE]   
+            self.STATS[EP] *= (1+self.STATS[DE])
             # Ask for the end game
-            simulation_flag = env.is_terminal_state()
-        
+            simulation_flag = env.is_terminal_state() 
+
+            something.append(step_tuple[1])
+            simulation_max+=1
+            if  simulation_max >100:
+                stack_rewards.pop()
+                stack_rewards.append((negative,step_tuple[0][1]))
+                break
+        print(something)
+        if(step_tuple[0][0]==GOAL_REWARD):
+            print(step_tuple[0][1])
+            print("LO ENCONTRO")
+        # if len(something) > self.longest:
+        #     self.longest = len(something)
+        #     print(self.longest)
         #update q-learning_table
         self.__update_q_table(stack_rewards,stack_actions)
         # Reset eps_greedy
@@ -122,6 +155,7 @@ class Agent():
     # Create new key in q-learning table
     def new_key(self,state):
         self.STATS[QT][state] = np.zeros(len(self.STATS[AC]))
+        #self.STATS[QT][state] = np.full(shape=len(self.STATS[AC]),fill_value=1,dtype=np.float64)
 
 
     # Get the best decision using the q-learning_table
@@ -133,10 +167,9 @@ class Agent():
     def step(self, env, learn=True):
         randomAction = False
         action = 0
-        
         if learn == True:
             eps_greddy = self.prng.random()
-            if eps_greddy> self.STATS[DF]:
+            if eps_greddy > self.STATS[EP]:
                 randomAction = True
         if randomAction:
             action = self.prng.randint(0,len(self.STATS[AC])-1)
@@ -261,7 +294,7 @@ class Maze():
 
 class mainWindow():
     def __init__(self, agentClass):
-        self.map_seed = random.randint(0,65535)
+        self.map_seed = 17#48738#random.randint(0,65535)
         self.maze = Maze(self.map_seed)
         self.agent_seed = random.randint(0,256)
         self.agentClass = agentClass
@@ -269,10 +302,10 @@ class mainWindow():
         self.redraw = False
         self.playing = False
         self.simulations = 0
-        self.learning_rate = 0.01
-        self.discount = 0.5
-        self.greedy = 0.8
-        self.decay = 1e-7
+        self.learning_rate = 0.95#0.01
+        self.discount = 0.95#0.5
+        self.greedy = 0.01#0.5#0.8
+        self.decay = 0.005#1e-7
         self.agent = self.agentClass(self.agent_seed, self.maze.get_state_dimensions(), self.maze.get_actions(),self.learning_rate,self.discount,self.greedy,self.decay)
         # Interface
         self.root = tk.Tk()
@@ -405,7 +438,7 @@ class mainWindow():
     # Next button
     def buttonNext_press(self):
         if self.playing: return
-        self.run_quick_simulation(1)
+        self.run_quick_simulation(1000)
     
     # Skip button
     def buttonSkip_press(self):
