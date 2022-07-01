@@ -55,6 +55,96 @@ LEFT_MOVE_HORIZONTAL = {0:-1,1:0,2:1,3:0}
 LEFT_MOVE_VERTICAL = {0:0,1:-1,2:0,3:1}
 PROXIMITY_SENSOR_LENGHT = 3
 
+
+
+
+
+### NN VARIABLES ###
+SD = "StateDimensions"
+AC = "action"
+LR = "LearningRate"
+DF = "DiscountFactor"
+EP = "EpsilonGreddy"
+DE = "Decay" 
+QT = "Q-LearningTable"
+
+class Agent():
+    # Initializes the training model
+    # Input states for the model depend on the get_state method, which can be modified
+
+
+    def __init__(self, memory_capacity, batch_size, c_iters, learning_rate, discount_factor, eps_greedy, decay):
+        self.STATS =  dict()
+        self.STATS[QT] = dict()
+        # The actions that I take depends on my current direction, the snake only chose
+        # (0 = Continue direction, 1 = Right, 2 = Left)
+        self.STATS[LR] = learning_rate
+        
+        self.STATS[AC] = {(0,0):0,(0,1):1,(0,2):3,
+                        (1,0):1,(1,1):2,(1,2):0,
+                        (2,0):2,(2,1):3,(2,2):1,
+                        (3,0):3,(3,1):0,(3,2):2} # (KEY (currentDirection,movementChoseByNN): VALUE(MOVEMENT))
+        self.STATS[DF] = discount_factor
+        self.STATS[EP] = eps_greedy  
+        self.STATS[DE] = decay
+        self.prng = random.Random()
+        self.prng.seed(RANDOM_SEED)
+    
+    # Performs a complete simulation by the agent, then samples "batch" memories from memory and learns, afterwards updates the decay
+    def simulation(self, env):
+         # Reset enviroment to begin a new simulation
+        env.reset()
+        # Changes made by decay just affect eps_greddy
+        eps_greddy = self.STATS[EP]
+        # Do simulation
+        simulation_flag = False
+        while not simulation_flag:
+            # Do the step
+            self.step(env) # step_tuple = ((reward, state),action)  
+            # Change the new eps_greddy
+            self.STATS[EP] *= (1+self.STATS[DE])
+            # Ask for the end game
+            simulation_flag = env.is_terminal_state() 
+        self.STATS[EP] = eps_greddy
+    
+    def new_key(self,state):
+        self.STATS[QT][state] = np.zeros(len(self.STATS[AC]))
+    # TODO: HAS TO BE IMPLEMENTED
+    def best(self,state):
+        return 0 
+        # note: if more than one value is the same, takes the first of those indexes
+
+    # Performs a single step of the simulation by the agent, if learn=False memories are not stored
+    def step(self, env, learn=True):
+        # Get current state
+        current_state = self.get_state() # It hasn´t been tested
+        random_movement = False
+        action = 0
+        # if learn=False no updates are performed and the best action is always taken
+        if learn:
+            eps_greddy = self.prng.random()
+            if eps_greddy > self.STATS[EP]:
+                random_movement = True
+        # if random action happen, choose random action
+        if random_movement:
+            movement = self.prng.randint(0,2) 
+        else:
+            movement = self.best(current_state) 
+        # Perform the action selected
+        action =  self.STATS[AC][(current_state[1],movement)]
+        env_tuple = env.perform_action(action)
+        if learn:
+            new_state = env_tuple[1]
+            reward = env_tuple[0]
+            self.__update_q_table(current_state,reward,new_state,action)
+
+
+class Action(enum.IntEnum):
+    UP = 0
+    RIGHT = 1
+    DOWN = 2
+    LEFT = 3
+
 class Tensor_X(enum.IntEnum):
     PROXIMITY_FRONT = 0
     PROXIMITY_RIGHT = 1
@@ -66,113 +156,6 @@ class Tensor_X(enum.IntEnum):
     REWARD_RIGHT = 7
     REWARD_LEFT = 8
 
-
-
-
-### TODO: CUSTOMIZE AGENT
-class Agent():
-    # Initializes the training model
-    # Input states for the model depend on the get_state method, which can be modified
-
-    # Get dangers arround snake
-    def danger_inspection(self,snake_body,movement):
-        # Wall inspection
-        if movement[0]<0 or movement[0]>= HEIGHT or movement[1] <0 or movement[1]>= WIDTH:
-            return 1
-        # Body inspection
-        if np.array(movement[0],dtype='int64') in snake_body[0] and np.array(movement[1],dtype='int64') in snake_body[1] :
-            return 1
-        return 0 
-
-    # Get rewards arround snake
-    def reward_inspection(self,apple,movement):
-        if movement[0] == apple[0] and movement[1]== apple[1]:
-            return 1
-        return 0
-    # Get reward proximity
-    def sensor_proximity(self,apple,movement,body,head):
-        for i in range(1,PROXIMITY_SENSOR_LENGHT+1):
-            if self.danger_inspection(body,(head[0]+movement[0]*i,head[0]+movement[0]*i)) == 1:
-                return 1
-            if self.reward_inspection(apple,(head[0]+movement[0]*i,head[0]+movement[0]*i)) == 1:
-                return 2
-        return 0
-
-
-    # To get a better understanding of own state
-    def change_state(self, env):
-        new_state = torch.zeros(len(Tensor_X),dtype=torch.float32)
-
-        # Get importan positions
-        body_row,body_column = np.where( env.get_state()[0] == 1)
-        head_row,head_column = np.where( env.get_state()[1] == 1 )
-        apple_row,apple_column = np.where( env.get_state()[2] == 1 )
-
-        # Get current snake direction
-        direction = env.direction
-        # Get possible new movements
-        front_movement = (FRONT_MOVE_VERTICAL[direction],FRONT_MOVE_HORIZONTAL[direction])
-        right_movement = (RIGHT_MOVE_VERTICAL[direction],RIGHT_MOVE_HORIZONTAL[direction])
-        left_movement = (LEFT_MOVE_VERTICAL[direction],LEFT_MOVE_HORIZONTAL[direction])
-        front_decision = (head_row[0] + front_movement[0],head_column[0] + front_movement[1])
-        right_decision = (head_row[0] + right_movement[0],head_column[0] + right_movement[1])
-        left_decision = (head_row[0] + left_movement[0],head_column[0] + left_movement[1])
-        # Get details in every possible movement
-        # Reward Proximity
-        new_state[ Tensor_X.PROXIMITY_FRONT.value ] = self.sensor_proximity((apple_row[0],apple_column[0]),front_movement,(body_row,body_column),(head_row[0],head_column[0]))
-        new_state[ Tensor_X.PROXIMITY_RIGHT.value ]  = self.sensor_proximity((apple_row[0],apple_column[0]),right_movement,(body_row,body_column),(head_row[0],head_column[0]))
-        new_state[ Tensor_X.PROXIMITY_LEFT.value ] = self.sensor_proximity((apple_row[0],apple_column[0]),left_movement,(body_row,body_column),(head_row[0],head_column[0]))
-        # Dangers 
-        new_state[ Tensor_X.DANGER_FRONT.value ] = self.danger_inspection((body_row,body_column),front_decision)         
-        new_state[ Tensor_X.DANGER_RIGHT.value ] = self.danger_inspection((body_row,body_column),right_decision)          
-        new_state[ Tensor_X.DANGER_LEFT.value ]=  self.danger_inspection((body_row,body_column),left_decision)    
-        # Rewards
-        new_state[ Tensor_X.REWARD_FRONT.value ] = self.reward_inspection((apple_row[0],apple_column[0]),front_decision)
-        new_state[ Tensor_X.REWARD_RIGHT.value ]  = self.reward_inspection((apple_row[0],apple_column[0]),right_decision)        
-        new_state[ Tensor_X.REWARD_LEFT.value ]  = self.reward_inspection((apple_row[0],apple_column[0]),left_decision)
-        return new_state
-
-    def __init__(self, memory_capacity, batch_size, c_iters, learning_rate, discount_factor, eps_greedy, decay):
-        self.prng = random.Random()
-        self.prng.seed(RANDOM_SEED)
-        pass
-    
-    # Performs a complete simulation by the agent, then samples "batch" memories from memory and learns, afterwards updates the decay
-    def simulation(self, env):
-         # Reset enviroment to begin a new simulation
-        env.reset()
-        # Changes made by decay just affect eps_greddy
-        eps_greddy = self.STATS[EP]
-        # Initialize first value in q-learning table if doesn't exist
-        current_state = env.get_state()
-        if current_state not in self.STATS[QT]:
-            self.new_key(current_state)
-        # Do simulation
-        simulation_flag = False
-        while not simulation_flag:
-            # Do the step
-            self.step(env) # step_tuple = ((reward, state),action)  
-            # Change the new eps_greddy
-            self.STATS[EP] *= (1+self.STATS[DE])
-            # Ask for the end game
-            simulation_flag = env.is_terminal_state() 
-        self.STATS[EP] = eps_greddy
-        state = self.change_state(env) # It hasn´t been tested
-
-        pass
-        
-        # TODO: Implement simulation loop + learning loop
-    
-    # Performs a single step of the simulation by the agent, if learn=False memories are not stored
-    def step(self, env, learn=True):
-        pass
-        # TODO: Implement single step, if learn=False no updates are performed and the best action is always taken
-
-class Action(enum.IntEnum):
-    UP = 0
-    RIGHT = 1
-    DOWN = 2
-    LEFT = 3
 
 class Snake():
     def __init__(self, seed=SNAKE_SEED):
@@ -210,7 +193,69 @@ class Snake():
     def get_actions(self):
         return [a.value for a in Action]
 
+    # Get dangers arround snake
+    def danger_inspection(self,snake_body,movement):
+        # Wall inspection
+        if movement[0]<0 or movement[0]>= HEIGHT or movement[1] <0 or movement[1]>= WIDTH:
+            return 1
+        # Body inspection
+        if np.array(movement[0],dtype='int64') in snake_body[0] and np.array(movement[1],dtype='int64') in snake_body[1] :
+            return 1
+        return 0 
+
+    # Get rewards arround snake
+    def reward_inspection(self,apple,movement):
+        if movement[0] == apple[0] and movement[1]== apple[1]:
+            return 1
+        return 0
+    # Get reward proximity
+    def sensor_proximity(self,apple,movement,body,head):
+        for i in range(1,PROXIMITY_SENSOR_LENGHT+1):
+            if self.danger_inspection(body,(head[0]+movement[0]*i,head[0]+movement[0]*i)) == 1:
+                return 1
+            if self.reward_inspection(apple,(head[0]+movement[0]*i,head[0]+movement[0]*i)) == 1:
+                return 2
+        return 0
+
+
+    # To get a better understanding in own state
+    def change_state(self, state):
+        new_state = torch.zeros(len(Tensor_X),dtype=torch.float32)
+
+        # Get important positions
+        body_row,body_column = np.where( state[0] == 1)
+        head_row,head_column = np.where(state[1] == 1 )
+        apple_row,apple_column = np.where( state[2] == 1 )
+
+        # Get current snake direction
+        direction = self.direction
+        # Get possible new movements
+        front_movement = (FRONT_MOVE_VERTICAL[direction],FRONT_MOVE_HORIZONTAL[direction])
+        right_movement = (RIGHT_MOVE_VERTICAL[direction],RIGHT_MOVE_HORIZONTAL[direction])
+        left_movement = (LEFT_MOVE_VERTICAL[direction],LEFT_MOVE_HORIZONTAL[direction])
+        front_decision = (head_row[0] + front_movement[0],head_column[0] + front_movement[1])
+        right_decision = (head_row[0] + right_movement[0],head_column[0] + right_movement[1])
+        left_decision = (head_row[0] + left_movement[0],head_column[0] + left_movement[1])
+        # Get details in every possible movement
+        # Reward Proximity
+        new_state[ Tensor_X.PROXIMITY_FRONT.value ] = self.sensor_proximity((apple_row[0],apple_column[0]),front_movement,(body_row,body_column),(head_row[0],head_column[0]))
+        new_state[ Tensor_X.PROXIMITY_RIGHT.value ]  = self.sensor_proximity((apple_row[0],apple_column[0]),right_movement,(body_row,body_column),(head_row[0],head_column[0]))
+        new_state[ Tensor_X.PROXIMITY_LEFT.value ] = self.sensor_proximity((apple_row[0],apple_column[0]),left_movement,(body_row,body_column),(head_row[0],head_column[0]))
+        # Dangers 
+        new_state[ Tensor_X.DANGER_FRONT.value ] = self.danger_inspection((body_row,body_column),front_decision)         
+        new_state[ Tensor_X.DANGER_RIGHT.value ] = self.danger_inspection((body_row,body_column),right_decision)          
+        new_state[ Tensor_X.DANGER_LEFT.value ]=  self.danger_inspection((body_row,body_column),left_decision)    
+        # Rewards
+        new_state[ Tensor_X.REWARD_FRONT.value ] = self.reward_inspection((apple_row[0],apple_column[0]),front_decision)
+        new_state[ Tensor_X.REWARD_RIGHT.value ]  = self.reward_inspection((apple_row[0],apple_column[0]),right_decision)        
+        new_state[ Tensor_X.REWARD_LEFT.value ]  = self.reward_inspection((apple_row[0],apple_column[0]),left_decision)
+        return new_state
+
     ### TODO(OPTIONAL): CAN BE MODIFIED; CURRENTLY RETURNS TENSOR OF SHAPE (3, WIDTH, HEIGHT)
+
+
+
+    # Returns a sensors in snake and its own current direction
     def get_state(self):
         snake = torch.zeros((HEIGHT,WIDTH),dtype=torch.float32)
         head = torch.zeros((HEIGHT,WIDTH),dtype=torch.float32)
@@ -219,8 +264,8 @@ class Snake():
             snake[pos] = 1
         head[self.positions[0]] = 1 # Modificado por Juan
         apple[self.apple_position] = 1
-        state = torch.stack((snake, head, apple))
-        return state
+        sensors = self.change_state(torch.stack((snake, head, apple)))
+        return (sensors,self.direction)
     
     # Returns whether current state is terminal
     def is_terminal_state(self):
