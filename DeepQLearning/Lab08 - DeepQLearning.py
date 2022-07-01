@@ -67,7 +67,7 @@ DF = "DiscountFactor"
 EP = "EpsilonGreddy"
 DE = "Decay" 
 QT = "Q-LearningTable"
-MC = "Memory Capacity"
+M = "Memory"
 BS = "Batch Size"
 I = "C Iterations"
 class Agent():
@@ -89,13 +89,38 @@ class Agent():
         self.STATS[DF] = discount_factor
         self.STATS[EP] = eps_greedy  
         self.STATS[DE] = decay
-        self.STATS[MC] = memory_capacity
+        self.STATS[M] = collections.deque([],memory_capacity)
+        #torch.tensor(self.STATS[M])
         self.STATS[BS] = batch_size  
         self.STATS[I] = c_iters
-
+        self.iterations = 0
         self.prng = random.Random()
         self.prng.seed(RANDOM_SEED)
-    
+    # Method that get the batch to train TODO
+    def get_batch(self):
+        # set memories
+        memories = torch.tensor(self.STATS[M])
+        pass
+    # Method that change the Target NN as Policy NN TODO
+    def change_NN(self):
+        pass
+    # Method that make the training in Policiy NN TODO
+    def train(self,batch):
+        pass
+    def learn(self):
+        # ask for c_iters
+        if(self.iterations==self.STATS[I]):
+            #change NN 
+            self.change_NN(self)
+            pass # TODO: Method
+        # get the batch that you will use (self.STATS[BS])
+        # TODO : Method 
+        batch = self.get_batch(self)
+        # train with that batch 
+        # TODO : Method
+        self.train(batch)
+        # 
+
     # Performs a complete simulation by the agent, then samples "batch" memories from memory and learns, afterwards updates the decay
     def simulation(self, env):
          # Reset enviroment to begin a new simulation
@@ -112,6 +137,7 @@ class Agent():
             # Ask for the end game
             simulation_flag = env.is_terminal_state() 
         self.STATS[EP] = eps_greddy
+        self.learn()
     
     def new_key(self,state):
         self.STATS[QT][state] = np.zeros(len(self.STATS[AC]))
@@ -119,13 +145,16 @@ class Agent():
     def best(self,state):
         return 0 
         # note: if more than one value is the same, takes the first of those indexes
+    # TODO: Has to be implemented
+    def __update_q_memory(current_state,reward,new_state,action):
+        pass
 
     # Performs a single step of the simulation by the agent, if learn=False memories are not stored
     def step(self, env, learn=True):
         # Get current state
         current_state = env.get_state() # It hasn´t been tested
         random_movement = False
-        action = 0
+        movement = 0
         # if learn=False no updates are performed and the best action is always taken
         if learn:
             eps_greddy = self.prng.random()
@@ -142,7 +171,7 @@ class Agent():
         if learn:
             new_state = env_tuple[1]
             reward = env_tuple[0]
-            self.__update_q_table(current_state,reward,new_state,action)
+            self.__update_q_memory(current_state,reward,new_state,action)
 
 
 class Action(enum.IntEnum):
@@ -226,7 +255,7 @@ class Snake():
 
     # To get a better understanding in own state
     def change_state(self, state):
-        new_state = torch.zeros(len(Tensor_X),dtype=torch.float32)
+        new_state = []
 
         # Get important positions
         body_row,body_column = np.where( state[0] == 1)
@@ -244,17 +273,17 @@ class Snake():
         left_decision = (head_row[0] + left_movement[0],head_column[0] + left_movement[1])
         # Get details in every possible movement
         # Reward Proximity
-        new_state[ Tensor_X.PROXIMITY_FRONT.value ] = self.sensor_proximity((apple_row[0],apple_column[0]),front_movement,(body_row,body_column),(head_row[0],head_column[0]))
-        new_state[ Tensor_X.PROXIMITY_RIGHT.value ]  = self.sensor_proximity((apple_row[0],apple_column[0]),right_movement,(body_row,body_column),(head_row[0],head_column[0]))
-        new_state[ Tensor_X.PROXIMITY_LEFT.value ] = self.sensor_proximity((apple_row[0],apple_column[0]),left_movement,(body_row,body_column),(head_row[0],head_column[0]))
+        new_state.append(self.sensor_proximity((apple_row[0],apple_column[0]),front_movement,(body_row,body_column),(head_row[0],head_column[0])))
+        new_state.append(self.sensor_proximity((apple_row[0],apple_column[0]),right_movement,(body_row,body_column),(head_row[0],head_column[0])))
+        new_state.append(self.sensor_proximity((apple_row[0],apple_column[0]),left_movement,(body_row,body_column),(head_row[0],head_column[0])))
         # Dangers 
-        new_state[ Tensor_X.DANGER_FRONT.value ] = self.danger_inspection((body_row,body_column),front_decision)         
-        new_state[ Tensor_X.DANGER_RIGHT.value ] = self.danger_inspection((body_row,body_column),right_decision)          
-        new_state[ Tensor_X.DANGER_LEFT.value ]=  self.danger_inspection((body_row,body_column),left_decision)    
+        new_state.append(self.danger_inspection((body_row,body_column),front_decision))
+        new_state.append(self.danger_inspection((body_row,body_column),right_decision))         
+        new_state.append(self.danger_inspection((body_row,body_column),left_decision) )  
         # Rewards
-        new_state[ Tensor_X.REWARD_FRONT.value ] = self.reward_inspection((apple_row[0],apple_column[0]),front_decision)
-        new_state[ Tensor_X.REWARD_RIGHT.value ]  = self.reward_inspection((apple_row[0],apple_column[0]),right_decision)        
-        new_state[ Tensor_X.REWARD_LEFT.value ]  = self.reward_inspection((apple_row[0],apple_column[0]),left_decision)
+        new_state.append(self.reward_inspection((apple_row[0],apple_column[0]),front_decision))
+        new_state.append(self.reward_inspection((apple_row[0],apple_column[0]),right_decision))       
+        new_state.append(self.reward_inspection((apple_row[0],apple_column[0]),left_decision))
         return new_state
 
     ### TODO(OPTIONAL): CAN BE MODIFIED; CURRENTLY RETURNS TENSOR OF SHAPE (3, WIDTH, HEIGHT)
