@@ -11,6 +11,7 @@ import random
 import time
 from requests import head
 import torch
+from ML import Snake_learning 
 try:
     import tkinter as tk
     import tkinter.simpledialog as simpledialog
@@ -59,15 +60,15 @@ PROXIMITY_SENSOR_LENGHT = 3
 
 
 
-### NN VARIABLES ###
-SD = "StateDimensions"
+### Q LEARNING VARIABLES ###
 AC = "action"
-LR = "LearningRate"
 DF = "DiscountFactor"
 EP = "EpsilonGreddy"
 DE = "Decay" 
-QT = "Q-LearningTable"
-M = "Memory"
+### NN VARIABLES###
+MA = "Memory Actions"
+MS = "Memory States"
+MR = "Memory Rewards"
 BS = "Batch Size"
 I = "C Iterations"
 class Agent():
@@ -76,50 +77,22 @@ class Agent():
 
 
     def __init__(self, memory_capacity, batch_size, c_iters, learning_rate, discount_factor, eps_greedy, decay):
+        # Initialize the two main vectors
         self.STATS =  dict()
-        self.STATS[QT] = dict()
+        self.NN = dict()
         # The actions that I take depends on my current direction, the snake only chose
         # (0 = Continue direction, 1 = Right, 2 = Left)
-        self.STATS[LR] = learning_rate
         
         self.STATS[AC] = {(0,0):0,(0,1):1,(0,2):3,
                         (1,0):1,(1,1):2,(1,2):0,
                         (2,0):2,(2,1):3,(2,2):1,
                         (3,0):3,(3,1):0,(3,2):2} # (KEY (currentDirection,movementChoseByNN): VALUE(MOVEMENT))
-        self.STATS[DF] = discount_factor
         self.STATS[EP] = eps_greedy  
         self.STATS[DE] = decay
-        self.STATS[M] = collections.deque([],memory_capacity)
-        #torch.tensor(self.STATS[M])
-        self.STATS[BS] = batch_size  
-        self.STATS[I] = c_iters
-        self.iterations = 0
+        self.brain = Snake_learning(learning_rate,memory_capacity,batch_size,c_iters,discount_factor)
         self.prng = random.Random()
         self.prng.seed(RANDOM_SEED)
-    # Method that get the batch to train TODO
-    def get_batch(self):
-        # set memories
-        memories = torch.tensor(self.STATS[M])
-        pass
-    # Method that change the Target NN as Policy NN TODO
-    def change_NN(self):
-        pass
-    # Method that make the training in Policiy NN TODO
-    def train(self,batch):
-        pass
-    def learn(self):
-        # ask for c_iters
-        if(self.iterations==self.STATS[I]):
-            #change NN 
-            self.change_NN(self)
-            pass # TODO: Method
-        # get the batch that you will use (self.STATS[BS])
-        # TODO : Method 
-        batch = self.get_batch(self)
-        # train with that batch 
-        # TODO : Method
-        self.train(batch)
-        # 
+    
 
     # Performs a complete simulation by the agent, then samples "batch" memories from memory and learns, afterwards updates the decay
     def simulation(self, env):
@@ -137,18 +110,8 @@ class Agent():
             # Ask for the end game
             simulation_flag = env.is_terminal_state() 
         self.STATS[EP] = eps_greddy
-        self.learn()
+        self.brain.learn() 
     
-    def new_key(self,state):
-        self.STATS[QT][state] = np.zeros(len(self.STATS[AC]))
-    # TODO: HAS TO BE IMPLEMENTED
-    def best(self,state):
-        return 0 
-        # note: if more than one value is the same, takes the first of those indexes
-    # TODO: Has to be implemented
-    def __update_q_memory(current_state,reward,new_state,action):
-        pass
-
     # Performs a single step of the simulation by the agent, if learn=False memories are not stored
     def step(self, env, learn=True):
         # Get current state
@@ -164,14 +127,14 @@ class Agent():
         if random_movement:
             movement = self.prng.randint(0,2) 
         else:
-            movement = self.best(current_state) 
+            movement = self.brain.best_movement(current_state)
         # Perform the action selected
         action =  self.STATS[AC][(current_state[1],movement)]
         env_tuple = env.perform_action(action)
         if learn:
             new_state = env_tuple[1]
             reward = env_tuple[0]
-            self.__update_q_memory(current_state,reward,new_state,action)
+            self.brain.new_memory(current_state,reward,new_state,action)
 
 
 class Action(enum.IntEnum):
