@@ -1,22 +1,14 @@
 import torch as pt
-from torch.utils.data import Dataset
-from torch.utils.data import DataLoader
 from collections import namedtuple, deque
 SAVEFILE = "model"
+LOADFILE = "model_ultimo"
+LOADMODE = True
 
-class MyDataset(Dataset):
-    def __init__(self, x, y,z=None):
-        super(MyDataset, self).__init__()
-        assert x.shape[0] == y.shape[0] # assuming shape[0] = dataset size
-        self.x = x
-        self.y = y
-        self.z = z
 
-    def __len__(self):
-        return self.y.shape[0]
 
-    def __getitem__(self, index):
-        return self.x[index], self.y[index], None if self.z == None else self.z[index]
+
+
+
 
 class Snake_learning():
 
@@ -48,42 +40,49 @@ class Snake_learning():
             '''
             super().__init__()
             self.l1 = pt.nn.Sequential(
-            pt.nn.Linear(9, 50),
-            pt.nn.LeakyReLU()
+            pt.nn.Linear(9, 100),
+            #pt.nn.LeakyReLU
+            pt.nn.Tanh()
             )
             self.l2 = pt.nn.Sequential(
-            pt.nn.Linear(50, 100),
-            pt.nn.ReLU()
+            pt.nn.Linear(100, 100),
+            pt.nn.LeakyReLU()
+            #pt.nn.LeakyReLU()
             )
             self.l3 = pt.nn.Sequential(
-            pt.nn.Linear(100, 3),
-            pt.nn.ReLU()
+            pt.nn.Linear(100, 3)
             )
             self.dropout = pt.nn.Dropout(0.10)
 
         def forward(self, x):
-            if x.shape[0]!= 9:
-                a = 2
             x = self.l1(x)
-            x = self.dropout(x)
+            #x = self.dropout(x) 
             x = self.l2(x)
-            x = self.dropout(x)
+            #x = self.dropout(x)
             x = self.l3(x)
-            x = self.dropout(x)
             return x
     
-    def __init__(self,learning_rate,memory_capacity,batch_size,c_iters,discount_factor):
+    def __init__(self,learning_rate,memory_capacity,batch_size,c_iters,discount_factor,load = LOADMODE):
         '''
         Main Variables
         '''
-        # They have begin at the same time
-        self.brain_target = self.Snake_brain()
-        self.brain_policy = self.Snake_brain()
-        self.loss_fn = pt.nn.SmoothL1Loss() # You can change it
-        self.optimizer = pt.optim.RMSprop(self.brain_policy.parameters(), lr=learning_rate) 
-        # self.loss_fn = pt.nn.MSELoss()
-        # self.optimizer = pt.optim.Adam(self.brain_policy.parameters(), lr=learning_rate)	# Optimizador
-        # self.new_target_nn()
+
+        if load:
+            checkpoint = pt.load(LOADFILE)
+            self.brain_target = self.Snake_brain()
+            self.brain_policy = self.Snake_brain()
+            self.brain_policy.load_state_dict(checkpoint["model_state_dict"])
+        else:
+            # They have begin at the same time
+            self.brain_target = self.Snake_brain()
+            self.brain_policy = self.Snake_brain()
+            # self.optimizer = pt.optim.RMSprop(self.brain_policy.parameters(), lr=learning_rate) 
+        self.optimizer = pt.optim.Adam(self.brain_policy.parameters(), lr=learning_rate)	# Optimizador
+        self.loss_fn = pt.nn.MSELoss()
+        #self.loss_fn = pt.nn.SmoothL1Loss() # You can change it
+        if load:
+            self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])	# Crea y carga el optimizador
+        self.new_target_nn()
         '''
         Other Variables 
         '''
@@ -94,7 +93,6 @@ class Snake_learning():
         self.discount_factor = discount_factor
         self.memory = self.ReplayMemory(memory_capacity)
         self.memory_capacity = memory_capacity
-        #torch.tensor(self.STATS[M])
 
     # Method that get the batch to train
     def get_batch(self,prng):
@@ -112,14 +110,22 @@ class Snake_learning():
         self.optimizer.zero_grad()
         loss.backward()
         # Juan_Problem: Look for this change , this is not natural, this can be a problem 
-        for param in self.brain_policy.parameters():
-            param.grad.data.clamp_(-1, 1) # https://deepai.org/machine-learning-glossary-and-terms/gradient-clipping#:~:text=Gradient%20clipping%20is%20a%20technique,input%20into%20a%20specific%20output.
+        # for param in self.brain_policy.parameters():
+        #     param.grad.data.clamp_(-1, 1) # https://deepai.org/machine-learning-glossary-and-terms/gradient-clipping#:~:text=Gradient%20clipping%20is%20a%20technique,input%20into%20a%20specific%20output.
         self.optimizer.step()
 
     # Method that make the training in Policiy NN 
-    def train(self,batch,current_apples):
+    def train(self,prng):
+        # train  
+        batch = self.get_batch(prng)
+        if batch is None:
+            return 
+        #self.train(batch,current_apples)
         # Get other batch forms
+
+        self.iterations +=1
         self.epoch+=1
+        self.learn()
         non_final_mask = pt.tensor(tuple(map(lambda s: s is not None, # Lógica de estados finales 
                                           batch.next_state)),dtype=pt.bool)#,device=device) # Pone si es o no normal, ayuda en el reward
         non_final_next_states = pt.cat([s for s in batch.next_state
@@ -135,25 +141,24 @@ class Snake_learning():
         expected_state_action_values = (next_state_values * self.discount_factor) + reward_batch # Ojo que aunque este en 0, el reward siempre juega
         loss = self.loss_fn(state_action_values, expected_state_action_values.unsqueeze(0)) # Esto esta raro que este 1, 50 TODO
         self.optimize(loss)
-        self.save_model(loss.item(),current_apples)
+        self.save_model(loss.item())
         
-    def learn(self,prng,current_apples):
+    def learn(self):
         # ask for c_iters        
         if(self.iterations==self.c_iters):
             #change NN 
-            self.new_target_nn(self)
-        # train  
-        self.c_iters +=1
-        batch = self.get_batch(prng)
-        if batch is None:
-            return 
-        self.train(batch,current_apples)
+            self.new_target_nn()
+            self.iterations=0
 
 
     # Do a single best movement TODO: to know if this is nn to use and if has to detach or not
     def best_movement(self,current_state):
+        self.brain_policy.eval()
         with pt.no_grad():
-            return self.brain_policy(pt.Tensor(current_state)).argmax().item()
+            movement = self.brain_policy(pt.Tensor(current_state)).argmax().item()
+        self.brain_policy.train()
+
+        return movement
 
     # To set a new memory in the agent brain
     def new_memory(self,state, action, next_state, reward):
@@ -163,14 +168,23 @@ class Snake_learning():
 
 
 
-    def save_model(self,loss,current_apples):
+    def save_model(self,loss):
         pt.save({
             'epoch': self.epoch,
             'model_state_dict': self.brain_policy.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
-            'loss': loss,
-            'current_apples': current_apples
+            'loss': loss#,
+            #'current_apples': current_apples
             }, SAVEFILE)
+
+    def save_model_perfect(self,manzanas):
+        pt.save({
+            'epoch': self.epoch,
+            'model_state_dict': self.brain_policy.state_dict(),
+            'optimizer_state_dict': self.optimizer.state_dict(),
+            #'loss': loss#,
+            #'current_apples': current_apples
+            }, "modelo_mejor_88")
 
 
 

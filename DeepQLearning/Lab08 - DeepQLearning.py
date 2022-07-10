@@ -5,6 +5,7 @@
 
 import collections
 import enum
+from shutil import move
 import numpy as np
 from PIL import Image,ImageTk
 import random
@@ -20,9 +21,29 @@ except ImportError:
         import Tkinter as tk
     except ImportError:
         print("Missing library: Tkinter, please install")
+#https://github.com/vedantgoswami/SnakeGameAI/blob/main/agent.py
 
+# NN VARIABLES
+MEMORY_CAPACITY = 20 # Es un escenario pequeño deberia de aprender rapido 
+BATCH_SIZE = 10 # Caso similar al anterior
+CITER=5
+LEARNING_RATE = 0.001# Esto puede ser [0.1,0.01,0.001]
+DISCOUNT = 0.9  # Esto puede ser [0.1,0.01,0.001]
+GREDDY = 0.50 # Puede subirle mas, pero la idea es que una vez es aleaotorio y otras no
+MINGREDDY = 0.80 # Por que no quiere moverse
+DECAY = 0.00001 # Por que no quiere moverse (si lo aumenta seguiria subiendo greedy, tenga cuidado)
+
+# serian los siguientes hiperparametros 
+# REDES = leaky,tan,relu
+# LR = [0.1 - 0.001] Luego puede probar en el extremo
+# GREDDY = [0.1 - 0.001] Puede probar en el extremo
+# Neuronas = [50,1000]
+
+# RANDOM SEEDS
 RANDOM_SEED = 21
-SNAKE_SEED = 31337
+SNAKE_SEED = 42#31337
+
+# ENVIROMENT VARIABLES
 WIDTH = 16
 HEIGHT = 24
 INIT_LENGTH = 3
@@ -30,16 +51,18 @@ INIT_MOVES = 256
 INIT_DIRECTION = 0
 EXTRA_MOVES = 128
 
-### TODO: CUSTOMIZE THE REWARDS
-EMPTY_REWARD = 0
-APPLE_REWARD = 0
-WALL_REWARD = 0
-SELF_REWARD = 0
+#REWARDS
+EMPTY_REWARD = -1
+APPLE_REWARD = 100
+WALL_REWARD = -100
+SELF_REWARD = -100
+
+# Pensamientos , era mejor que vayan directo al grano
 
 ### UI related
 FPS = 30
 APS = 8
-
+# Colors
 colors = {
     0: (0,0,0),
     1: (255,255,128),
@@ -49,16 +72,12 @@ colors = {
 
 # Agent Constants 
 FRONT_MOVE_HORIZONTAL = {0:0,1:1,2:0,3:-1}
-FRONT_MOVE_VERTICAL = {0:-1,1:0,2:1,3:-1}
+FRONT_MOVE_VERTICAL = {0:-1,1:0,2:1,3:0}
+LEFT_MOVE_HORIZONTAL ={0:-1,1:0,2:1,3:0}
+LEFT_MOVE_VERTICAL = {0:0,1:-1,2:0,3:1}
 RIGHT_MOVE_HORIZONTAL = {0:1,1:0,2:-1,3:0}
 RIGHT_MOVE_VERTICAL = {0:0,1:1,2:0,3:-1}
-LEFT_MOVE_HORIZONTAL = {0:-1,1:0,2:1,3:0}
-LEFT_MOVE_VERTICAL = {0:0,1:-1,2:0,3:1}
 PROXIMITY_SENSOR_LENGHT = 3
-
-
-
-
 
 ### Q LEARNING VARIABLES ###
 AC = "action"
@@ -71,6 +90,15 @@ MS = "Memory States"
 MR = "Memory Rewards"
 BS = "Batch Size"
 I = "C Iterations"
+
+
+class Action(enum.IntEnum):
+    UP = 0
+    RIGHT = 1
+    DOWN = 2
+    LEFT = 3
+
+
 class Agent():
     # Initializes the training model
     # Input states for the model depend on the get_state method, which can be modified
@@ -89,70 +117,104 @@ class Agent():
                         (3,0):3,(3,1):0,(3,2):2} # (KEY (currentDirection,movementChoseByNN): VALUE(MOVEMENT))
         self.STATS[EP] = eps_greedy  
         self.STATS[DE] = decay
-        self.brain = Snake_learning(learning_rate,memory_capacity,batch_size,c_iters,discount_factor)
         self.prng = random.Random()
         self.prng.seed(RANDOM_SEED)
-    
-
+        self.brain = Snake_learning(learning_rate,memory_capacity,batch_size,c_iters,discount_factor)
+        self.current_step = 0
+        self.total_steps = 0
+        self.total_simulation = 0
+        self.best_apples = 0
+        
     # Performs a complete simulation by the agent, then samples "batch" memories from memory and learns, afterwards updates the decay
     def simulation(self, env):
+        self.current_step=0
          # Reset enviroment to begin a new simulation
         env.reset()
         # Changes made by decay just affect eps_greddy
         eps_greddy = self.STATS[EP]
         # Do simulation
         simulation_flag = False
+        current_apples = 0
         while not simulation_flag:
             # Do the step
-            self.step(env) # step_tuple = ((reward, state),action)  
+            current_apples += self.step(env) # step_tuple = ((reward, state),action)  
             # Change the new eps_greddy
             self.STATS[EP] *= (1+self.STATS[DE])
             # Ask for the end game
             simulation_flag = env.is_terminal_state() 
+        self.total_simulation +=1
         self.STATS[EP] = eps_greddy
-        self.brain.learn() 
+        # if(current_apples>2):
+        #     print("manzana: ", current_apples)
+        #     print("Paso en simulacion: ",self.current_step)
+        self.total_steps+=self.current_step
+        print("Simulacion: ",self.total_simulation)
+        print("Pasos tomados: ",self.total_steps)
+        if(self.total_steps > 20):
+            self.simulation_apples(env)
+
+    def simulation_apples(self, env):
+        env.reset()
+        simulation_flag = False
+        current_apples = 0
+        movements = 0
+        while not simulation_flag:
+            # Do the step
+            current_apples += self.step(env,False) # step_tuple = ((reward, state),action)  
+            # Ask for the end game
+            movements +=1
+            simulation_flag = env.is_terminal_state() 
+            if movements > 30:
+                simulation_flag = True
+        if(current_apples>self.best_apples):
+            self.best_apples = current_apples
+            self.brain.save_model_perfect(current_apples)
+            print("Mejor Score: ", current_apples)
+
     
     # Performs a single step of the simulation by the agent, if learn=False memories are not stored
     def step(self, env, learn=True):
+        self.current_step+=1
         # Get current state
-        current_state = env.get_state() # It hasn´t been tested
+        state = env.get_state() # It hasn´t been tested
         random_movement = False
         movement = 0
+        apple = 0
         # if learn=False no updates are performed and the best action is always taken
         if learn:
             eps_greddy = self.prng.random()
+            if(self.STATS[EP]> MINGREDDY):
+                self.STATS[EP] =MINGREDDY
+
             if eps_greddy > self.STATS[EP]:
                 random_movement = True
         # if random action happen, choose random action
         if random_movement:
             movement = self.prng.randint(0,2) 
         else:
-            movement = self.brain.best_movement(current_state)
+            movement = self.brain.best_movement(state[0])
         # Perform the action selected
-        action =  self.STATS[AC][(current_state[1],movement)]
+        action =  self.STATS[AC][(state[1],movement)]
         env_tuple = env.perform_action(action)
+        reward = env_tuple[0]
+        if(reward == APPLE_REWARD):
+            apple = 1
         if learn:
-            new_state = env_tuple[1]
-            reward = env_tuple[0]
-            self.brain.new_memory(current_state,reward,new_state,action)
+            if env.is_terminal_state():
+                next_state = None
+            else:
+                next_state = torch.tensor([env_tuple[1][0]],dtype = torch.float32)
+            reward = torch.tensor([reward])
+            action =  torch.tensor([movement])
+            state = torch.tensor([state[0]],dtype = torch.float32) # voy
+            if(self.current_step % 50 == 0):
+                print(self.current_step)
+            self.brain.new_memory(state[0], action, next_state, reward)
+            self.brain.train(self.prng)
+        return apple
 
 
-class Action(enum.IntEnum):
-    UP = 0
-    RIGHT = 1
-    DOWN = 2
-    LEFT = 3
 
-class Tensor_X(enum.IntEnum):
-    PROXIMITY_FRONT = 0
-    PROXIMITY_RIGHT = 1
-    PROXIMITY_LEFT = 2
-    DANGER_FRONT = 3
-    DANGER_RIGHT = 4
-    DANGER_LEFT = 5
-    REWARD_FRONT = 6
-    REWARD_RIGHT = 7
-    REWARD_LEFT = 8
 
 
 class Snake():
@@ -195,60 +257,85 @@ class Snake():
     def danger_inspection(self,snake_body,movement):
         # Wall inspection
         if movement[0]<0 or movement[0]>= HEIGHT or movement[1] <0 or movement[1]>= WIDTH:
-            return 1
+            return -1
         # Body inspection
-        if np.array(movement[0],dtype='int64') in snake_body[0] and np.array(movement[1],dtype='int64') in snake_body[1] :
-            return 1
-        return 0 
+        if torch.any(torch.logical_and(torch.isin(snake_body[0],movement[0]),torch.isin(snake_body[1],movement[1]))).item():
+            return -1
+        return 1
 
     # Get rewards arround snake
     def reward_inspection(self,apple,movement):
         if movement[0] == apple[0] and movement[1]== apple[1]:
             return 1
         return 0
+
+    # Get near_reward 
+    def near_reward(self,apple,head,movement):
+        reward = 0
+        if head[0] == apple[0] or head[1]== apple[1]:
+            # Near in vertical position
+            if apple[0] == head[0]:
+                if apple[1] == (head[1] + movement[1]):
+                    reward = 1
+            else:
+                if apple[0] == (head[0] + movement[0]):
+                    reward = 1
+        return reward
+
+
+
     # Get reward proximity
     def sensor_proximity(self,apple,movement,body,head):
-        for i in range(1,PROXIMITY_SENSOR_LENGHT+1):
-            if self.danger_inspection(body,(head[0]+movement[0]*i,head[0]+movement[0]*i)) == 1:
-                return 1
-            if self.reward_inspection(apple,(head[0]+movement[0]*i,head[0]+movement[0]*i)) == 1:
-                return 2
-        return 0
+        pivot = 0
+        while True:
+            if self.reward_inspection(apple,(head[0]+movement[0]*pivot,head[1]+movement[1]*pivot)) == 1:
+                pivot = 1
+                break
+            pivot+=1
+            if self.danger_inspection(body,(head[0]+movement[0]*pivot,head[1]+movement[1]*pivot)) == -1:
+                pivot = -1
+                break
+            
+        return pivot
+        # for i in range(1,PROXIMITY_SENSOR_LENGHT+1):
+        #     if self.danger_inspection(body,(head[0]+movement[0]*i,head[0]+movement[0]*i)) == 1:
+        #         return 1
+        #     if self.reward_inspection(apple,(head[0]+movement[0]*i,head[0]+movement[0]*i)) == 1:
+        #         return 2
+        # return 0
 
-
-    # To get a better understanding in own state
+    # To get a better understanding inwo own state
     def change_state(self, state):
         new_state = []
-
         # Get important positions
-        body_row,body_column = np.where( state[0] == 1)
-        head_row,head_column = np.where(state[1] == 1 )
-        apple_row,apple_column = np.where( state[2] == 1 )
-
+        body = torch.tensor(np.array(np.where( state[0] == 1)))
+        head = torch.tensor(torch.where( state[1] == 1))
+        apple = torch.tensor(torch.where( state[2] == 1))
+        
         # Get current snake direction
         direction = self.direction
         # Get possible new movements
         front_movement = (FRONT_MOVE_VERTICAL[direction],FRONT_MOVE_HORIZONTAL[direction])
         right_movement = (RIGHT_MOVE_VERTICAL[direction],RIGHT_MOVE_HORIZONTAL[direction])
         left_movement = (LEFT_MOVE_VERTICAL[direction],LEFT_MOVE_HORIZONTAL[direction])
-        front_decision = (head_row[0] + front_movement[0],head_column[0] + front_movement[1])
-        right_decision = (head_row[0] + right_movement[0],head_column[0] + right_movement[1])
-        left_decision = (head_row[0] + left_movement[0],head_column[0] + left_movement[1])
+        front_decision = (head[0] + front_movement[0],head[1] + front_movement[1])
+        right_decision = (head[0] + right_movement[0],head[1] + right_movement[1])
+        left_decision = (head[0] + left_movement[0],head[1] + left_movement[1])
         # Get details in every possible movement
         # Reward Proximity
-        new_state.append(self.sensor_proximity((apple_row[0],apple_column[0]),front_movement,(body_row,body_column),(head_row[0],head_column[0])))
-        new_state.append(self.sensor_proximity((apple_row[0],apple_column[0]),right_movement,(body_row,body_column),(head_row[0],head_column[0])))
-        new_state.append(self.sensor_proximity((apple_row[0],apple_column[0]),left_movement,(body_row,body_column),(head_row[0],head_column[0])))
+        new_state.append(self.sensor_proximity(apple,front_movement,body,head))
+        new_state.append(self.sensor_proximity(apple,right_movement,body,head))
+        new_state.append(self.sensor_proximity(apple,left_movement,body,head))
         # Dangers 
-        new_state.append(self.danger_inspection((body_row,body_column),front_decision))
-        new_state.append(self.danger_inspection((body_row,body_column),right_decision))         
-        new_state.append(self.danger_inspection((body_row,body_column),left_decision) )  
+        new_state.append(self.danger_inspection(body,front_decision))
+        new_state.append(self.danger_inspection(body,right_decision))         
+        new_state.append(self.danger_inspection(body,left_decision ))  
         # Rewards
-        new_state.append(self.reward_inspection((apple_row[0],apple_column[0]),front_decision))
-        new_state.append(self.reward_inspection((apple_row[0],apple_column[0]),right_decision))       
-        new_state.append(self.reward_inspection((apple_row[0],apple_column[0]),left_decision))
-        return new_state
+        new_state.append(self.reward_inspection(apple,front_decision))
+        new_state.append(self.reward_inspection(apple,right_decision))       
+        new_state.append(self.reward_inspection(apple,left_decision ))
 
+        return new_state
     ### TODO(OPTIONAL): CAN BE MODIFIED; CURRENTLY RETURNS TENSOR OF SHAPE (3, WIDTH, HEIGHT)
 
 
@@ -314,13 +401,15 @@ class mainWindow():
         self.epoch = 0
         self.score = 0
         self.highscore = 0
-        self.memory_capacity = 10000
-        self.batch_size = 1000
-        self.c_iters = 10
-        self.learning_rate = 0.001
-        self.discount = 0.25
-        self.greedy = 0.25
-        self.decay = 1e-7
+        
+
+        self.memory_capacity = MEMORY_CAPACITY#10000
+        self.batch_size = BATCH_SIZE#1000
+        self.c_iters = CITER#10
+        self.learning_rate = LEARNING_RATE#0.001
+        self.discount = DISCOUNT#0.25
+        self.greedy = GREDDY#0.25
+        self.decay = DECAY#1e-7
         self.agent = agentCls(self.memory_capacity, self.batch_size, self.c_iters, self.learning_rate, self.discount, self.greedy, self.decay)
         # Interface
         self.root = tk.Tk()
