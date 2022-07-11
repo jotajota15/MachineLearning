@@ -41,7 +41,7 @@ DECAY = 0.00001 # Por que no quiere moverse (si lo aumenta seguiria subiendo gre
 
 # RANDOM SEEDS
 RANDOM_SEED = 21
-SNAKE_SEED = 42#31337
+SNAKE_SEED = 31337
 
 # ENVIROMENT VARIABLES
 WIDTH = 16
@@ -110,11 +110,11 @@ class Agent():
         self.NN = dict()
         # The actions that I take depends on my current direction, the snake only chose
         # (0 = Continue direction, 1 = Right, 2 = Left)
-        
+        # (Current movement, NN decision(Snake Decision))
         self.STATS[AC] = {(0,0):0,(0,1):1,(0,2):3,
                         (1,0):1,(1,1):2,(1,2):0,
                         (2,0):2,(2,1):3,(2,2):1,
-                        (3,0):3,(3,1):0,(3,2):2} # (KEY (currentDirection,movementChoseByNN): VALUE(MOVEMENT))
+                        (3,0):3,(3,1):0,(3,2):2} 
         self.STATS[EP] = eps_greedy  
         self.STATS[DE] = decay
         self.prng = random.Random()
